@@ -9,58 +9,10 @@ import rmgpy.constants as constants
 from rmgpy.statmech import Conformer, IdealGasTranslation, LinearRotor, NonlinearRotor, HarmonicOscillator
 from rmgpy.molecule import Molecule
 
+import energy_data
+
 
 class Structure(object):
-    # Atomic reference energies at 0K in Hartree
-    atom_energies = {
-        'ccsd(t)-f12/cc-pvdz-f12': {  # From Cantherm
-            'H': -0.499811124128,
-            'N': -54.526406291655,
-            'O': -74.995458316117,
-            'C': -37.788203485235,
-            'S': -397.663040369707
-        },
-        'ccsd(t)-f12/cc-pvtz-f12': {  # From Cantherm
-            'H': -0.499946213243,
-            'N': -54.53000909621,
-            'O': -75.004127673424,
-            'C': -37.789862146471,
-            'S': -397.675447487865
-        },
-        'b3lyp/6-31g(2df,p)': {  # From 134k
-            'H': -0.500273,
-            'C': -37.846772,
-            'N': -54.583861,
-            'O': -75.064579,
-            'F': -99.718730,
-        },
-    }
-
-    # Bond energy corrections from Cantherm
-    bond_energy_corrections = {
-        'ccsd(t)-f12/cc-pvdz-f12': {
-            'C-H': -0.46, 'C-C': -0.68, 'C=C': -1.90, 'C#C': -3.13,
-            'O-H': -0.51, 'C-O': -0.23, 'C=O': -0.69, 'O-O': -0.02, 'C-N': -0.67,
-            'C=N': -1.46, 'C#N': -2.79, 'N-O': 0.74, 'N_O': -0.23, 'N=O': -0.51,
-            'N-H': -0.69, 'N-N': -0.47, 'N=N': -1.54, 'N#N': -2.05, 'S-H': 0.87,
-            'C-S': 0.42, 'C=S': 0.51, 'S-S': 0.86, 'O-S': 0.23, 'O=S': -0.53,
-            'O=S=O': 1.95
-        },
-        'ccsd(t)-f12/cc-pvtz-f12': {
-            'C-H': -0.09, 'C-C': -0.27, 'C=C': -1.03, 'C#C': -1.79,
-            'O-H': -0.06, 'C-O': 0.14, 'C=O': -0.19, 'O-O': 0.16, 'C-N': -0.18,
-            'C=N': -0.41, 'C#N': -1.41, 'N-O': 0.87, 'N_O': -0.09, 'N=O': -0.23,
-            'N-H': -0.01, 'N-N': -0.21, 'N=N': -0.44, 'N#N': -0.76, 'S-H': 0.52,
-            'C-S': 0.13, 'C=S': -0.12, 'S-S': 0.30, 'O-S': 0.15, 'O=S': -2.61,
-            'O=S=O': 0.27,
-        },
-        'b3lyp/6-31g(2df,p)': {
-            'C-H': 0.25, 'C-C': -1.89, 'C=C': -0.40, 'C#C': -1.50,
-            'O-H': -1.09, 'C-O': -1.18, 'C=O': -0.01, 'N-H': 1.36, 'C-N': -0.44,
-            'C#N': 0.22, 'C-S': -2.35, 'O=S': -5.19, 'S-H': -0.52,
-        }
-    }
-
     # Enthalpy correction terms based on atomic heats of formation in kcal/mol
     enthalpy_corrections = {
         'H': 50.62,
@@ -244,13 +196,13 @@ class Structure(object):
         zpe = self.zpe * constants.E_h * constants.Na * freq_scale_factor
 
         # Bring energy to gas phase reference state at 298.15K
-        atom_energies = self.atom_energies[self.model_chemistry]
+        atom_energies = energy_data.atom_energies[self.model_chemistry]
         for element in self.elements:
             e0 -= atom_energies[element] * constants.E_h * constants.Na
             e0 += self.enthalpy_corrections[element] * 4184.0
 
         if apply_bond_corrections:
-            bond_energies = self.bond_energy_corrections[self.model_chemistry]
+            bond_energies = energy_data.bond_energy_corrections[self.model_chemistry]
             for bond in mol.getAllEdges():
                 # Sorting in this way makes sure that the order is C, N, O, H
                 atom_symbols = sorted([bond.atom1.symbol, bond.atom2.symbol])
