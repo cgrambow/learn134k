@@ -63,6 +63,7 @@ class Structure(object):
         self.file_name = None
         self.model_chemistry = None
         self.e0 = None  # (Ha)
+        self.hf298 = None  # J/mol
 
         # Get structure
         if path is not None:
@@ -217,5 +218,6 @@ class Structure(object):
                 e0 += bond_energies[bond_symbol] * 4184.0
 
         conformer.E0 = (e0 + zpe, 'J/mol')
+        self.hf298 = conformer.getEnthalpy(temperature) + conformer.E0.value_si
 
-        return conformer.getEnthalpy(temperature) + conformer.E0.value_si
+        return self.hf298
