@@ -2,12 +2,15 @@
 # -*- coding:utf-8 -*-
 
 import os
+import warnings
 
 import numpy as np
+import pybel
 
 import rmgpy.constants as constants
 from rmgpy.statmech import Conformer, IdealGasTranslation, LinearRotor, NonlinearRotor, HarmonicOscillator
 from rmgpy.molecule import Molecule
+from rmgpy.exceptions import AtomTypeError
 
 import energy_data
 
@@ -20,6 +23,14 @@ class Structure(object):
         'N': 111.49,
         'O': 57.95,
         'F': 17.42,
+    }
+
+    atomic_num_dict = {
+        1: 'H',
+        6: 'C',
+        7: 'N',
+        8: 'O',
+        9: 'F'
     }
 
     # Symbols used for bond energy corrections based on bond order
@@ -39,7 +50,8 @@ class Structure(object):
         self.coords = None            # Row 2,...,natoms+1 (Angstrom)
         self.mulliken_charges = None  # Row 2,...,natoms+1 (e)
         self.freqs = None             # Row natoms+2 (cm^-1)
-        self.smiles = None            # Row natoms+3
+        self.smiles = None            # Row natoms+3  Corresponding to input to B3LYP opt
+        self.smiles2 = None           # Row natoms+3  As parsed from the optimized geo
         self.inchi = None             # Row natoms+4
 
         # Properties line (row 1)
@@ -109,7 +121,9 @@ class Structure(object):
                 raise
 
         self.freqs = np.array([float(col) for col in lines[self.natoms+2].split()])
-        self.smiles = lines[self.natoms+3].split()[1]
+        smiles = lines[self.natoms+3].split()
+        self.smiles = smiles[0]
+        self.smiles2 = smiles[1]
         self.inchi = lines[self.natoms+4].split()[1]
 
         self.tag = props[0]
@@ -173,13 +187,31 @@ class Structure(object):
         model chemistry is compatible.
         """
         temperature = 298.15
-        mol = Molecule().fromSMILES(self.smiles)
+        mol = pybel.readstring('smi', self.smiles)  # Use OBMol to extract bond types
+
+        # Use RMG molecule to determine if it's linear
+        # Assume it's not linear if we can't parse SMILES with RMG
+        rmg_mol = None
+        try:
+            rmg_mol = Molecule().fromSMILES(self.smiles)
+        except AtomTypeError:
+            try:
+                rmg_mol = Molecule().fromSMILES(self.smiles2)
+            except AtomTypeError:
+                try:
+                    rmg_mol = Molecule().fromInChI(self.inchi)
+                except AtomTypeError:
+                    warnings.warn('Could not determine linearity from RMG molecule in {}'.format(self.file_name))
+        if rmg_mol is not None:
+            is_linear = rmg_mol.isLinear()
+        else:
+            is_linear = False
 
         # Translation
         translation = IdealGasTranslation()
 
         # Rotation
-        if mol.isLinear():
+        if is_linear:
             rotation = LinearRotor()
         else:
             rotation = NonlinearRotor(rotationalConstant=(self.rotational_consts, 'GHz'))
@@ -204,18 +236,19 @@ class Structure(object):
 
         if apply_bond_corrections:
             bond_energies = energy_data.bond_energy_corrections[self.model_chemistry]
-            for bond in mol.getAllEdges():
-                # Sorting in this way makes sure that the order is C, N, O, H
-                atom_symbols = sorted([bond.atom1.symbol, bond.atom2.symbol])
+            for bond in pybel.ob.OBMolBondIter(mol.OBMol):
+                bond_symbol_split = [
+                    self.atomic_num_dict[bond.GetBeginAtom().GetAtomicNum()],
+                    self.bond_symbols[bond.GetBondOrder()],
+                    self.atomic_num_dict[bond.GetEndAtom().GetAtomicNum()]
+                ]
+
                 try:
-                    h_index = atom_symbols.index('H')
-                except ValueError:
-                    pass
-                else:
-                    other_symbol = atom_symbols[1-h_index]
-                    atom_symbols = [other_symbol, 'H']
-                bond_symbol = atom_symbols[0] + self.bond_symbols[bond.order] + atom_symbols[1]
-                e0 += bond_energies[bond_symbol] * 4184.0
+                    bond_energy = bond_energies[''.join(bond_symbol_split)]
+                except KeyError:
+                    bond_energy = bond_energies[''.join(bond_symbol_split[::-1])]  # Try reverse order
+
+                e0 += bond_energy * 4184.0
 
         conformer.E0 = (e0 + zpe, 'J/mol')
         self.hf298 = conformer.getEnthalpy(temperature) + conformer.E0.value_si
