@@ -8,6 +8,7 @@ import os
 
 from data.structure import Structure
 from data.energy_data import freq_scale_factors
+from data.util import pickle_dump
 
 
 def main():
@@ -23,9 +24,8 @@ def main():
                                         apply_bond_corrections=False)
             structs.append(s)
 
-    with open(out_file, 'wb') as f:
-        pickle.dump(structs, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print('Dumped {} structures to {}'.format(len(structs), out_file))
+    pickle_dump(out_file, structs, compress=True)
+    print('Dumped {} structures to {}'.format(len(structs), out_file))
 
 
 def parse_args():
