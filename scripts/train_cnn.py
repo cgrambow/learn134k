@@ -4,6 +4,7 @@
 import argparse
 import logging
 import os
+import random
 import shutil
 import sys
 
@@ -66,6 +67,8 @@ def main():
     structs = pickle_load(struct_file, compressed=True)
     logging.info('Loaded {} structures'.format(len(structs)))
 
+    random.seed(a=0)
+    random.shuffle(structs)
     if ndata is not None:
         structs = structs[:ndata]
         logging.info('Randomly selected {} structures'.format(len(structs)))
@@ -112,6 +115,9 @@ def main():
         add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
     )
     model = build_model(attribute_vector_size=attribute_vector_size, **model_settings)
+
+    # Free memory for variables we no longer need before training
+    del structs, x, y, names, names_train, names_test
 
     logging.info('Training model...')
     logging.info('Training data: {} points'.format(len(x_train)))
