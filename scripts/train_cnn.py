@@ -53,6 +53,7 @@ def main():
     args = parse_args()
     struct_file = args.struct_file
     out_dir = args.out_dir
+    model_weights_path = args.model
     ndata = args.ndata
     test_split = args.test_split
     save_names = args.save_names
@@ -115,6 +116,9 @@ def main():
         add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
     )
     model = build_model(attribute_vector_size=attribute_vector_size, **model_settings)
+    if model_weights_path is not None:
+        logging.info('Loading model weights from {}'.format(model_weights_path))
+        model.load_weights(model_weights_path)
 
     # Free memory for variables we no longer need before training
     del structs, x, y, names, names_train, names_test
@@ -132,6 +136,14 @@ def main():
 
     logging.info('Saving model')
     model_path = os.path.join(out_dir, 'model')
+    model_structure_path = model_path + '.json'
+    model_weights_path = model_path + '.h5'
+    if os.path.exists(model_structure_path):
+        logging.info('Backing up model structure (and removing old backup if present): {}'.format(model_structure_path))
+        shutil.move(model_structure_path, model_path + '_backup.json')
+    if os.path.exists(model_weights_path):
+        logging.info('Backing up model weights (and removing old backup if present): {}'.format(model_path + '.h5'))
+        shutil.move(model_weights_path, model_path + '_backup.h5')
     save_model(model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, model_path)
 
 
@@ -143,6 +155,7 @@ def parse_args():
     parser.add_argument('struct_file', metavar='FILE',
                         help='Path to pickled and zipped file containing list of structures')
     parser.add_argument('out_dir', metavar='DIR', help='Output directory')
+    parser.add_argument('-m', '--model', metavar='PATH', help='Saved model weights to continue training on')
     parser.add_argument('-n', '--ndata', type=int, metavar='N', help='Number of data points to use')
     parser.add_argument('-t', '--test_split', type=float, default=0.1, metavar='S', help='Fraction of data to test on')
     parser.add_argument('-s', '--save_names', action='store_true', help='Store file names')
