@@ -9,7 +9,7 @@ import os
 import random
 import shutil
 
-from data.structure import Structure
+from l134k.structure import Structure
 
 
 def main():

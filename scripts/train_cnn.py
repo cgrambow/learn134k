@@ -12,8 +12,8 @@ from rmgpy.cnn_framework.data import split_test_from_train_and_val, split_inner_
 from rmgpy.cnn_framework.cnn_model import build_model, train_model, save_model
 from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
 
-from data.tensors import struct_to_tensor
-from data.util import pickle_load
+from l134k.tensors import struct_to_tensor
+from l134k.util import pickle_load
 
 # Tensor settings
 tensor_settings = {

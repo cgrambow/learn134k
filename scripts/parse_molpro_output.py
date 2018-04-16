@@ -6,9 +6,9 @@ import cPickle as pickle
 import glob
 import os
 
-from data.structure import Structure
-from data.energy_data import freq_scale_factors
-from data.util import pickle_dump
+from l134k.structure import Structure
+from l134k.energy_data import freq_scale_factors
+from l134k.util import pickle_dump
 
 
 def main():
