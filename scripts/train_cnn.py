@@ -8,11 +8,12 @@ import random
 import shutil
 import sys
 
-from rmgpy.cnn_framework.data import split_test_from_train_and_val, split_inner_val_from_train_data
-from rmgpy.cnn_framework.cnn_model import build_model, train_model, save_model
+import numpy as np
+
 from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
 
 from l134k.tensors import struct_to_tensor
+from l134k.predictor import Predictor
 from l134k.util import pickle_load
 
 # Tensor settings
@@ -74,77 +75,41 @@ def main():
         structs = structs[:ndata]
         logging.info('Randomly selected {} structures'.format(len(structs)))
 
-    # Initialize lists holding molecule tensors, heats of formation, and smiles
-    x = []
-    y = []
+    # Initialize arrays containing molecule tensors, heats of formation, and smiles
+    attribute_vector_size = get_attribute_vector_size(
+        add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
+        add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
+    )
+
+    x = np.zeros((len(structs),
+                  tensor_settings['padding_final_size'],
+                  tensor_settings['padding_final_size'],
+                  attribute_vector_size))
+    y = np.zeros(len(structs))
     names = []
 
     logging.info('Converting structures to molecule tensors...')
+    i = 0
     for struct in structs:
         mol_tensor = struct_to_tensor(struct, tensor_settings['padding_final_size'],
                                       add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
                                       add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute'])
         if mol_tensor is not None:
-            x.append(mol_tensor)
-            y.append(struct.hf298 / 4184.0)  # Convert to kcal/mol
+            x[i] = mol_tensor
+            y[i] = struct.hf298 / 4184.0  # Convert to kcal/mol
             names.append(struct.file_name)
+            i += 1
+    # Remove empty end of arrays
+    x = x[:i]
+    y = y[:i]
     logging.info('{} structures converted to tensors'.format(len(x)))
 
-    logging.info('Splitting dataset with a test split of {}'.format(test_split))
-    x_test, y_test, x_train, y_train, names_test, names_train = split_test_from_train_and_val(x, y,
-                                                                                              extra_data=names,
-                                                                                              shuffle_seed=7,
-                                                                                              testing_ratio=test_split)
-    if save_names:
-        names_test_path = os.path.join(out_dir, 'names_test.txt')
-        names_train_path = os.path.join(out_dir, 'names_train.txt')
-        with open(names_test_path, 'w') as f:
-            for name in names_test:
-                f.write(name + '\n')
-        with open(names_train_path, 'w') as f:
-            for name in names_train:
-                f.write(name + '\n')
-
-    logging.info('Splitting training data into early-stopping validation and remaining training sets')
-    x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(x_train, y_train,
-                                                                                 shuffle_seed=77,
-                                                                                 training_ratio=0.9)
-
-    # Build model
-    attribute_vector_size = get_attribute_vector_size(
-        add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
-        add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
-    )
-    model = build_model(attribute_vector_size=attribute_vector_size, **model_settings)
+    # Set up class for training, build model, and train
+    predictor = Predictor(out_dir)
+    predictor.build_model(tensor_settings, **model_settings)
     if model_weights_path is not None:
-        logging.info('Loading model weights from {}'.format(model_weights_path))
-        model.load_weights(model_weights_path)
-
-    # Free memory for variables we no longer need before training
-    del structs, x, y, names, names_train, names_test
-
-    logging.info('Training model...')
-    logging.info('Training data: {} points'.format(len(x_train)))
-    logging.info('Inner validation data: {} points'.format(len(x_inner_val)))
-    logging.info('Test data: {} points'.format(len(x_test)))
-    model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss = train_model(model,
-                                                                                   x_train, y_train,
-                                                                                   x_inner_val, y_inner_val,
-                                                                                   x_test, y_test,
-                                                                                   X_outer_val=None, y_outer_val=None,
-                                                                                   **train_settings)
-
-    logging.info('Saving model')
-    model_path = os.path.join(out_dir, 'model')
-    model_structure_path = model_path + '.json'
-    model_weights_path = model_path + '.h5'
-    if os.path.exists(model_structure_path):
-        logging.info('Backing up model structure (and removing old backup if present): {}'.format(model_structure_path))
-        shutil.move(model_structure_path, model_path + '_backup.json')
-    if os.path.exists(model_weights_path):
-        logging.info('Backing up model weights (and removing old backup if present): {}'.format(model_path + '.h5'))
-        shutil.move(model_weights_path, model_path + '_backup.h5')
-    save_model(model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, model_path)
+        predictor.load_weights(model_weights_path)
+    predictor.full_train(x, y, names, test_split, save_names=save_names, **train_settings)
 
 
 def parse_args():
