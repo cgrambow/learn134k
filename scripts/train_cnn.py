@@ -56,6 +56,7 @@ def main():
     out_dir = args.out_dir
     model_weights_path = args.model
     ndata = args.ndata
+    folds = args.folds
     test_split = args.test_split
     save_names = args.save_names
 
@@ -80,7 +81,6 @@ def main():
         add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
         add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
     )
-
     x = np.zeros((len(structs),
                   tensor_settings['padding_final_size'],
                   tensor_settings['padding_final_size'],
@@ -99,6 +99,7 @@ def main():
             y[i] = struct.hf298 / 4184.0  # Convert to kcal/mol
             names.append(struct.file_name)
             i += 1
+
     # Remove empty end of arrays
     x = x[:i]
     y = y[:i]
@@ -109,7 +110,12 @@ def main():
     predictor.build_model(tensor_settings, **model_settings)
     if model_weights_path is not None:
         predictor.load_weights(model_weights_path)
-    predictor.full_train(x, y, names, test_split, save_names=save_names, **train_settings)
+
+    # Perform cross-validation if folds was specified
+    if folds is None:
+        predictor.full_train(x, y, names, test_split, save_names=save_names, **train_settings)
+    else:
+        predictor.kfcv_train(x, y, names, folds, test_split, save_names=save_names, **train_settings)
 
 
 def parse_args():
@@ -122,6 +128,8 @@ def parse_args():
     parser.add_argument('out_dir', metavar='DIR', help='Output directory')
     parser.add_argument('-m', '--model', metavar='PATH', help='Saved model weights to continue training on')
     parser.add_argument('-n', '--ndata', type=int, metavar='N', help='Number of data points to use')
+    parser.add_argument('-f', '--folds', type=int, metavar='K',
+                        help='If this option is used, perform cross-validation with the given number of folds')
     parser.add_argument('-t', '--test_split', type=float, default=0.1, metavar='S', help='Fraction of data to test on')
     parser.add_argument('-s', '--save_names', action='store_true', help='Store file names')
     return parser.parse_args()

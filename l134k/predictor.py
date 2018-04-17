@@ -5,9 +5,10 @@ import logging
 import os
 import shutil
 
-from rmgpy.cnn_framework.cnn_model import build_model, train_model, save_model
+from rmgpy.cnn_framework.cnn_model import build_model, train_model, save_model, reset_model
 from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
-from rmgpy.cnn_framework.data import split_test_from_train_and_val, split_inner_val_from_train_data
+from rmgpy.cnn_framework.data import (split_test_from_train_and_val, split_inner_val_from_train_data,
+                                      prepare_folded_data, prepare_data_one_fold)
 
 
 class Predictor(object):
@@ -22,11 +23,14 @@ class Predictor(object):
         )
         self.model = build_model(attribute_vector_size=attribute_vector_size, **model_settings)
 
+    def reset_model(self):
+        self.model = reset_model(self.model)
+
     def load_weights(self, model_weights_path):
         logging.info('Loading model weights from {}'.format(model_weights_path))
         self.model.load_weights(model_weights_path)
 
-    def full_train(self, x, y, names, test_split, save_names=False, **train_settings):
+    def split_test(self, x, y, names, test_split, save_names=False):
         logging.info('Splitting dataset with a test split of {}'.format(test_split))
         x_test, y_test, x_train, y_train, names_test, names_train = split_test_from_train_and_val(
             x, y, extra_data=names, shuffle_seed=7, testing_ratio=test_split
@@ -42,10 +46,46 @@ class Predictor(object):
                 for name in names_train:
                     f.write(name + '\n')
 
+        return x_test, y_test, x_train, y_train
+
+    def kfcv_train(self, x, y, names, folds, test_split, save_names=False, **train_settings):
+        x_test, y_test, x_train_and_val, y_train_and_val = self.split_test(
+            x, y, names, test_split, save_names=save_names
+        )
+        folded_xs, folded_ys = prepare_folded_data(x_train_and_val, y_train_and_val, folds, shuffle_seed=2)
+
+        losses = []
+        inner_val_losses = []
+        outer_val_losses = []
+        test_losses = []
+        for fold in range(folds):
+            x_train, x_inner_val, x_outer_val, y_train, y_inner_val, y_outer_val = prepare_data_one_fold(
+                folded_xs, folded_ys, current_fold=fold, shuffle_seed=4, training_ratio=0.9
+            )
+
+            self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss = train_model(
+                self.model, x_train, y_train, x_inner_val, y_inner_val, x_test, y_test,
+                X_outer_val=x_outer_val, y_outer_val=y_outer_val, **train_settings
+            )
+
+            losses.append(loss)
+            inner_val_losses.append(inner_val_loss)
+            outer_val_losses.append(mean_outer_val_loss)
+            test_losses.append(mean_test_loss)
+
+            model_path = os.path.join(self.out_dir, 'model_fold_{}'.format(fold))
+            self.save_model(model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
+
+            # once finish training one fold, reset the model
+            self.reset_model()
+
+    def full_train(self, x, y, names, test_split, save_names=False, **train_settings):
+        x_test, y_test, x_train, y_train = self.split_test(x, y, names, test_split, save_names=save_names)
+
         logging.info('Splitting training data into early-stopping validation and remaining training sets')
-        x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(x_train, y_train,
-                                                                                     shuffle_seed=77,
-                                                                                     training_ratio=0.9)
+        x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(
+            x_train, y_train, shuffle_seed=77, training_ratio=0.9
+        )
 
         logging.info('Training model...')
         logging.info('Training data: {} points'.format(len(x_train)))
@@ -56,11 +96,11 @@ class Predictor(object):
             X_outer_val=None, y_outer_val=None, **train_settings
         )
 
-        self.save_model(loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
-
-    def save_model(self, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss):
-        logging.info('Saving model')
         model_path = os.path.join(self.out_dir, 'model')
+        self.save_model(model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
+
+    def save_model(self, model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss):
+        logging.info('Saving model')
         model_structure_path = model_path + '.json'
         model_weights_path = model_path + '.h5'
         if os.path.exists(model_structure_path):
