@@ -1,4 +1,5 @@
 keras
 numpy
+pandas
 pybel
 rmgpy

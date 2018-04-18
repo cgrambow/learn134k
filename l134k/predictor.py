@@ -12,7 +12,7 @@ from rmgpy.cnn_framework.data import (split_test_from_train_and_val, split_inner
 
 
 class Predictor(object):
-    def __init__(self, out_dir):
+    def __init__(self, out_dir=None):
         self.model = None
         self.out_dir = out_dir
 
@@ -111,3 +111,6 @@ class Predictor(object):
             logging.info('Backing up model weights (and removing old backup if present): {}'.format(model_path + '.h5'))
             shutil.move(model_weights_path, model_path + '_backup.h5')
         save_model(self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, model_path)
+
+    def predict(self, x):
+        return self.model.predict(x)
