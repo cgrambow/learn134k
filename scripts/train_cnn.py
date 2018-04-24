@@ -27,7 +27,13 @@ def main():
     ndata = args.ndata
     folds = args.folds
     test_split = args.test_split
+    train_ratio = args.train_ratio
+    epochs = args.epochs
+    patience = args.patience
     save_names = args.save_names
+
+    train_settings['nb_epoch'] = epochs
+    train_settings['patience'] = patience
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -82,9 +88,9 @@ def main():
 
     # Perform cross-validation if folds was specified
     if folds is None:
-        predictor.full_train(x, y, names, test_split, save_names=save_names, **train_settings)
+        predictor.full_train(x, y, names, test_split, train_ratio, save_names=save_names, **train_settings)
     else:
-        predictor.kfcv_train(x, y, names, folds, test_split, save_names=save_names, **train_settings)
+        predictor.kfcv_train(x, y, names, folds, test_split, train_ratio, save_names=save_names, **train_settings)
 
 
 def parse_args():
@@ -100,6 +106,10 @@ def parse_args():
     parser.add_argument('-f', '--folds', type=int, metavar='K',
                         help='If this option is used, perform cross-validation with the given number of folds')
     parser.add_argument('-t', '--test_split', type=float, default=0.1, metavar='S', help='Fraction of data to test on')
+    parser.add_argument('-r', '--train_ratio', type=float, default=0.9, metavar='R',
+                        help='Fraction of data to train on (rest is inner validation)')
+    parser.add_argument('-e', '--epochs', type=int, default=150, metavar='N', help='Maximum number of epochs')
+    parser.add_argument('-p', '--patience', type=int, default=10, metavar='P', help='Patience for early stopping')
     parser.add_argument('-s', '--save_names', action='store_true', help='Store file names')
     return parser.parse_args()
 

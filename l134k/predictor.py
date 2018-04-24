@@ -48,7 +48,7 @@ class Predictor(object):
 
         return x_test, y_test, x_train, y_train
 
-    def kfcv_train(self, x, y, names, folds, test_split, save_names=False, **train_settings):
+    def kfcv_train(self, x, y, names, folds, test_split, train_ratio, save_names=False, **train_settings):
         x_test, y_test, x_train_and_val, y_train_and_val = self.split_test(
             x, y, names, test_split, save_names=save_names
         )
@@ -60,7 +60,7 @@ class Predictor(object):
         test_losses = []
         for fold in range(folds):
             x_train, x_inner_val, x_outer_val, y_train, y_inner_val, y_outer_val = prepare_data_one_fold(
-                folded_xs, folded_ys, current_fold=fold, shuffle_seed=4, training_ratio=0.9
+                folded_xs, folded_ys, current_fold=fold, shuffle_seed=4, training_ratio=train_ratio
             )
 
             self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss = train_model(
@@ -79,12 +79,12 @@ class Predictor(object):
             # once finish training one fold, reset the model
             self.reset_model()
 
-    def full_train(self, x, y, names, test_split, save_names=False, **train_settings):
+    def full_train(self, x, y, names, test_split, train_ratio, save_names=False, **train_settings):
         x_test, y_test, x_train, y_train = self.split_test(x, y, names, test_split, save_names=save_names)
 
         logging.info('Splitting training data into early-stopping validation and remaining training sets')
         x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(
-            x_train, y_train, shuffle_seed=77, training_ratio=0.9
+            x_train, y_train, shuffle_seed=77, training_ratio=train_ratio
         )
 
         logging.info('Training model...')
