@@ -90,7 +90,8 @@ def main():
     if folds is None:
         predictor.full_train(x, y, names, test_split, train_ratio, save_names=save_names, **train_settings)
     else:
-        predictor.kfcv_train(x, y, names, folds, test_split, train_ratio, save_names=save_names, **train_settings)
+        predictor.kfcv_train(x, y, names, folds, test_split, train_ratio,
+                             save_names=save_names, pretrained_weights=model_weights_path, **train_settings)
 
 
 def parse_args():

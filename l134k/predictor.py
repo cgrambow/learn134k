@@ -48,7 +48,8 @@ class Predictor(object):
 
         return x_test, y_test, x_train, y_train
 
-    def kfcv_train(self, x, y, names, folds, test_split, train_ratio, save_names=False, **train_settings):
+    def kfcv_train(self, x, y, names, folds, test_split, train_ratio,
+                   save_names=False, pretrained_weights=None, **train_settings):
         x_test, y_test, x_train_and_val, y_train_and_val = self.split_test(
             x, y, names, test_split, save_names=save_names
         )
@@ -77,7 +78,10 @@ class Predictor(object):
             self.save_model(model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
 
             # once finish training one fold, reset the model
-            self.reset_model()
+            if pretrained_weights is not None:
+                self.load_weights(pretrained_weights)
+            else:
+                self.reset_model()
 
     def full_train(self, x, y, names, test_split, train_ratio, save_names=False, **train_settings):
         x_test, y_test, x_train, y_train = self.split_test(x, y, names, test_split, save_names=save_names)
