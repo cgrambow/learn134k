@@ -8,11 +8,7 @@ import random
 import shutil
 import sys
 
-import numpy as np
-
-from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
-
-from l134k.tensors import struct_to_tensor
+from l134k.tensors import structs_to_tensors
 from l134k.predictor import Predictor
 from l134k.settings import tensor_settings, model_settings, train_settings
 from l134k.util import pickle_load
@@ -27,6 +23,7 @@ def main():
     ndata = args.ndata
     folds = args.folds
     test_split = args.test_split
+    test_struct_file = args.test_data
     train_ratio = args.train_ratio
     epochs = args.epochs
     patience = args.patience
@@ -44,6 +41,12 @@ def main():
     logging.info('Loading structures from {}...'.format(struct_file))
     structs = pickle_load(struct_file, compressed=True)
     logging.info('Loaded {} structures'.format(len(structs)))
+    if test_struct_file is not None:
+        logging.info('Loading testing structures from {}...'.format(struct_file))
+        test_structs = pickle_load(test_struct_file, compressed=True)
+        logging.info('Loaded {} testing structures'.format(len(structs)))
+    else:
+        test_structs = None
 
     random.seed(a=0)
     random.shuffle(structs)
@@ -51,34 +54,18 @@ def main():
         structs = structs[:ndata]
         logging.info('Randomly selected {} structures'.format(len(structs)))
 
-    # Initialize arrays containing molecule tensors, heats of formation, and smiles
-    attribute_vector_size = get_attribute_vector_size(
-        add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
-        add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute']
-    )
-    x = np.zeros((len(structs),
-                  tensor_settings['padding_final_size'],
-                  tensor_settings['padding_final_size'],
-                  attribute_vector_size))
-    y = np.zeros(len(structs))
-    names = []
-
-    logging.info('Converting structures to molecule tensors...')
-    i = 0
-    for struct in structs:
-        mol_tensor = struct_to_tensor(struct, tensor_settings['padding_final_size'],
-                                      add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
-                                      add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute'])
-        if mol_tensor is not None:
-            x[i] = mol_tensor
-            y[i] = struct.hf298 / 4184.0  # Convert to kcal/mol
-            names.append(struct.file_name)
-            i += 1
-
-    # Remove empty end of arrays
-    x = x[:i]
-    y = y[:i]
-    logging.info('{} structures converted to tensors'.format(len(x)))
+    x, y, names = structs_to_tensors(structs,
+                                     tensor_settings['padding_final_size'],
+                                     add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
+                                     add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute'])
+    if test_structs is not None:
+        x_test, y_test, _ = structs_to_tensors(test_structs,
+                                               tensor_settings['padding_final_size'],
+                                               add_extra_atom_attribute=tensor_settings['add_extra_atom_attribute'],
+                                               add_extra_bond_attribute=tensor_settings['add_extra_bond_attribute'])
+        test_data = (x_test, y_test)
+    else:
+        test_data = None
 
     # Set up class for training, build model, and train
     predictor = Predictor(out_dir)
@@ -88,9 +75,10 @@ def main():
 
     # Perform cross-validation if folds was specified
     if folds is None:
-        predictor.full_train(x, y, names, test_split, train_ratio, save_names=save_names, **train_settings)
+        predictor.full_train(x, y, names, test_split, train_ratio,
+                             test_data=test_data, save_names=save_names, **train_settings)
     else:
-        predictor.kfcv_train(x, y, names, folds, test_split, train_ratio,
+        predictor.kfcv_train(x, y, names, folds, test_split, train_ratio, test_data=test_data,
                              save_names=save_names, pretrained_weights=model_weights_path, **train_settings)
 
 
@@ -107,6 +95,9 @@ def parse_args():
     parser.add_argument('-f', '--folds', type=int, metavar='K',
                         help='If this option is used, perform cross-validation with the given number of folds')
     parser.add_argument('-t', '--test_split', type=float, default=0.1, metavar='S', help='Fraction of data to test on')
+    parser.add_argument('--test_data', metavar='FILE',
+                        help='Pickled file containing list of test data '
+                             '(all data in struct_file will be used for training)')
     parser.add_argument('-r', '--train_ratio', type=float, default=0.9, metavar='R',
                         help='Fraction of data to train on (rest is inner validation)')
     parser.add_argument('-e', '--epochs', type=int, default=150, metavar='N', help='Maximum number of epochs')

@@ -49,10 +49,14 @@ class Predictor(object):
         return x_test, y_test, x_train, y_train
 
     def kfcv_train(self, x, y, names, folds, test_split, train_ratio,
-                   save_names=False, pretrained_weights=None, **train_settings):
+                   test_data=None, save_names=False, pretrained_weights=None, **train_settings):
+        if test_data is not None:
+            test_split = 0
         x_test, y_test, x_train_and_val, y_train_and_val = self.split_test(
             x, y, names, test_split, save_names=save_names
         )
+        if test_data is not None:
+            x_test, y_test = test_data
         folded_xs, folded_ys = prepare_folded_data(x_train_and_val, y_train_and_val, folds, shuffle_seed=2)
 
         losses = []
@@ -83,8 +87,12 @@ class Predictor(object):
             else:
                 self.reset_model()
 
-    def full_train(self, x, y, names, test_split, train_ratio, save_names=False, **train_settings):
+    def full_train(self, x, y, names, test_split, train_ratio, test_data=None, save_names=False, **train_settings):
+        if test_data is not None:
+            test_split = 0.0
         x_test, y_test, x_train, y_train = self.split_test(x, y, names, test_split, save_names=save_names)
+        if test_data is not None:
+            x_test, y_test = test_data
 
         logging.info('Splitting training data into early-stopping validation and remaining training sets')
         x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(
