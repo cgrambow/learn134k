@@ -50,8 +50,8 @@ class Structure(object):
         self.coords = None            # Row 2,...,natoms+1 (Angstrom)
         self.mulliken_charges = None  # Row 2,...,natoms+1 (e)
         self.freqs = None             # Row natoms+2 (cm^-1)
-        self.smiles = None            # Row natoms+3  Corresponding to input to B3LYP opt
-        self.smiles2 = None           # Row natoms+3  As parsed from the optimized geo
+        self.smiles = None            # Row natoms+3  As parsed from the optimized geo
+        self.smiles2 = None           # Row natoms+3  Corresponding to input to B3LYP opt
         self.inchi = None             # Row natoms+4
 
         # Properties line (row 1)
@@ -122,8 +122,8 @@ class Structure(object):
 
         self.freqs = np.array([float(col) for col in lines[self.natoms+2].split()])
         smiles = lines[self.natoms+3].split()
-        self.smiles = smiles[0]
-        self.smiles2 = smiles[1]
+        self.smiles = smiles[1]
+        self.smiles2 = smiles[0]
         self.inchi = lines[self.natoms+4].split()[1]
 
         self.tag = props[0]

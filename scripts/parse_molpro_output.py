@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 
 import argparse
-import cPickle as pickle
 import glob
 import os
 
@@ -12,8 +11,19 @@ from l134k.util import pickle_dump
 
 
 def main():
-    data_dir, quantum_dir, out_file = parse_args()
+    data_dir, quantum_dir, out_file, ignore_file = parse_args()
     structs = []
+
+    ignore = set()
+    if ignore_file is not None:
+        with open(ignore_file) as f:
+            for line in f:
+                try:
+                    idx = int(line.split()[0])
+                except (IndexError, ValueError):
+                    continue
+                else:
+                    ignore.add(idx)
 
     print('Parsing files')
     # We require all matching input and output files from the
@@ -46,6 +56,9 @@ def main():
                 raise Exception('Energy not found in {}'.format(outpath))
 
         s = Structure(path=struct_path)
+        if s.index in ignore:
+            continue
+
         model_chemistry = method + '/' + basis
         s.set_energy(energy, model_chemistry)
         s.get_enthalpy_of_formation(freq_scale_factor=freq_scale_factors[model_chemistry],
@@ -64,13 +77,15 @@ def parse_args():
     parser.add_argument('data_dir', metavar='DDIR', help='Path to 134k data directory')
     parser.add_argument('quantum_dir', metavar='QDIR', help='Path to quantum calculation files')
     parser.add_argument('out_file', metavar='FILE', help='Path to output file')
+    parser.add_argument('--ignore', metavar='FILE', help='Path to file containing list of indices to ignore')
     args = parser.parse_args()
 
     data_dir = args.data_dir
     quantum_dir = args.quantum_dir
     out_file = args.out_file
+    ignore_file = args.ignore
 
-    return data_dir, quantum_dir, out_file
+    return data_dir, quantum_dir, out_file, ignore_file
 
 
 if __name__ == '__main__':
