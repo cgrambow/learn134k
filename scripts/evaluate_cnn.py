@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 
 import argparse
+import os
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ def main():
     out_file = args.out_file
     struct_list = args.struct_list
     model_weights_path = args.model
+    mean_and_std_path = os.path.splitext(model_weights_path)[0] + '.attr'
 
     # Load saved structures and extract only the ones in struct_list
     print('Loading structures from {}...'.format(struct_file))
@@ -60,6 +62,7 @@ def main():
     predictor = Predictor()
     predictor.build_model(tensor_settings, **model_settings)
     predictor.load_weights(model_weights_path)
+    predictor.load_mean_and_std(mean_and_std_path)
 
     y_pred = predictor.predict(x).flatten()
 

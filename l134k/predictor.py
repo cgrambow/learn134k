@@ -5,16 +5,22 @@ import logging
 import os
 import shutil
 
+import numpy as np
+
 from rmgpy.cnn_framework.cnn_model import build_model, train_model, save_model, reset_model
 from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
 from rmgpy.cnn_framework.data import (split_test_from_train_and_val, split_inner_val_from_train_data,
                                       prepare_folded_data, prepare_data_one_fold)
+
+from util import pickle_dump, pickle_load
 
 
 class Predictor(object):
     def __init__(self, out_dir=None):
         self.model = None
         self.out_dir = out_dir
+        self.y_mean = None
+        self.y_std = None
 
     def build_model(self, tensor_settings, **model_settings):
         attribute_vector_size = get_attribute_vector_size(
@@ -29,6 +35,18 @@ class Predictor(object):
     def load_weights(self, model_weights_path):
         logging.info('Loading model weights from {}'.format(model_weights_path))
         self.model.load_weights(model_weights_path)
+
+    def load_mean_and_std(self, mean_and_std_path):
+        self.y_mean, self.y_std = pickle_load(mean_and_std_path)
+
+    def normalize(self, y_train, *other_ys):
+        self.y_mean = np.mean(y_train, axis=0)
+        self.y_std = np.std(y_train, axis=0)
+        logging.info('Mean: {} kcal/mol, std: {} kcal/mol'.format(self.y_mean, self.y_std))
+
+        y_train = (y_train - self.y_mean) / self.y_std
+        other_ys = tuple((y-self.y_mean)/self.y_std for y in other_ys)
+        return y_train, other_ys
 
     def split_test(self, x, y, names, test_split, save_names=False):
         logging.info('Splitting dataset with a test split of {}'.format(test_split))
@@ -67,6 +85,7 @@ class Predictor(object):
             x_train, x_inner_val, x_outer_val, y_train, y_inner_val, y_outer_val = prepare_data_one_fold(
                 folded_xs, folded_ys, current_fold=fold, shuffle_seed=4, training_ratio=train_ratio
             )
+            y_train, (y_inner_val, y_outer_val, y_test) = self.normalize(y_train, y_inner_val, y_outer_val, y_test)
 
             self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss = train_model(
                 self.model, x_train, y_train, x_inner_val, y_inner_val, x_test, y_test,
@@ -98,6 +117,7 @@ class Predictor(object):
         x_train, x_inner_val, y_train, y_inner_val = split_inner_val_from_train_data(
             x_train, y_train, shuffle_seed=77, training_ratio=train_ratio
         )
+        y_train, (y_inner_val, y_test) = self.normalize(y_train, y_inner_val, y_test)
 
         logging.info('Training model...')
         logging.info('Training data: {} points'.format(len(x_train)))
@@ -115,14 +135,23 @@ class Predictor(object):
         logging.info('Saving model')
         model_structure_path = model_path + '.json'
         model_weights_path = model_path + '.h5'
+        mean_and_std_path = model_path + '.attr'
         if os.path.exists(model_structure_path):
             logging.info(
                 'Backing up model structure (and removing old backup if present): {}'.format(model_structure_path))
             shutil.move(model_structure_path, model_path + '_backup.json')
         if os.path.exists(model_weights_path):
-            logging.info('Backing up model weights (and removing old backup if present): {}'.format(model_path + '.h5'))
+            logging.info('Backing up model weights (and removing old backup if present): {}'.format(model_weights_path))
             shutil.move(model_weights_path, model_path + '_backup.h5')
+        if os.path.exists(mean_and_std_path):
+            logging.info('Backing up mean and std (and removing old backup if present): {}'.format(mean_and_std_path))
+            shutil.move(mean_and_std_path, model_path + '_backup.attr')
         save_model(self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, model_path)
+        pickle_dump(mean_and_std_path, (self.y_mean, self.y_std))
 
     def predict(self, x):
-        return self.model.predict(x)
+        y_norm = self.model.predict(x)
+        if self.y_mean is not None and self.y_std is not None:
+            raise Exception('Missing mean and std of training data')
+        else:
+            return y_norm * self.y_std + self.y_mean
