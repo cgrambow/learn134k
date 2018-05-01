@@ -27,10 +27,13 @@ def main():
     train_ratio = args.train_ratio
     epochs = args.epochs
     patience = args.patience
+    lr = args.learning_rate
+    decay = args.lr_decay
     save_names = args.save_names
 
     train_settings['nb_epoch'] = epochs
     train_settings['patience'] = patience
+    train_settings['lr_func'] = "float({0} * np.exp(- epoch / {1}))".format(lr, decay)
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -102,6 +105,8 @@ def parse_args():
                         help='Fraction of data to train on (rest is inner validation)')
     parser.add_argument('-e', '--epochs', type=int, default=150, metavar='N', help='Maximum number of epochs')
     parser.add_argument('-p', '--patience', type=int, default=10, metavar='P', help='Patience for early stopping')
+    parser.add_argument('--learning_rate', type=float, default=0.0007, metavar='LR', help='Learning rate')
+    parser.add_argument('--lr_decay', type=float, default=30.0, metavar='LRD', help='Learning rate decay')
     parser.add_argument('-s', '--save_names', action='store_true', help='Store file names')
     return parser.parse_args()
 
