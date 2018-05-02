@@ -64,7 +64,7 @@ def main():
     predictor.load_weights(model_weights_path)
     predictor.load_mean_and_std(mean_and_std_path)
 
-    y_pred = predictor.predict(x).flatten()
+    y_pred = predictor.predict(x)
 
     df = pd.DataFrame(index=smiles)
     df['Hf298 true (kcal/mol)'] = pd.Series(y, index=df.index)
