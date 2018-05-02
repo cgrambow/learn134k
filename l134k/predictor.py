@@ -12,7 +12,7 @@ from rmgpy.cnn_framework.molecule_tensor import get_attribute_vector_size
 from rmgpy.cnn_framework.data import (split_test_from_train_and_val, split_inner_val_from_train_data,
                                       prepare_folded_data, prepare_data_one_fold)
 
-from util import pickle_dump, pickle_load
+from util import pickle_dump, pickle_load, calculate_rmse, calculate_mae
 
 
 class Predictor(object):
@@ -97,6 +97,30 @@ class Predictor(object):
             outer_val_losses.append(mean_outer_val_loss)
             test_losses.append(mean_test_loss)
 
+            rmse_train, mae_train = self.evaluate(x_train, y_train, norm=True)
+            if x_inner_val.size:
+                rmse_inner_val, mae_inner_val = self.evaluate(x_inner_val, y_inner_val, norm=True)
+            else:
+                rmse_inner_val, mae_inner_val = np.NaN, np.NaN
+            rmse_outer_val, mae_outer_val = self.evaluate(x_outer_val, y_outer_val, norm=True)
+            if x_test.size:
+                rmse_test, mae_test = self.evaluate(x_test, y_test, norm=True)
+            else:
+                rmse_test, mae_test = np.NaN, np.NaN
+            logging.info('Final statistics:')
+            logging.info(
+                '\t\t\tRMSE\tMAE\n'
+                'Train\t\t{:.2f}\t{:.2f}\n'
+                'Inner val\t{:.2f}\t{:.2f}\n'
+                'Outer val\t{:.2f}\t{:.2f}\n'
+                'Test\t\t{:.2f}\t{:.2f}'.format(
+                    rmse_train, mae_train,
+                    rmse_inner_val, mae_inner_val,
+                    rmse_outer_val, mae_outer_val,
+                    rmse_test, mae_test
+                )
+            )
+
             model_path = os.path.join(self.out_dir, 'model_fold_{}'.format(fold))
             self.save_model(model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
 
@@ -128,6 +152,25 @@ class Predictor(object):
             X_outer_val=None, y_outer_val=None, **train_settings
         )
 
+        rmse_train, mae_train = self.evaluate(x_train, y_train, norm=True)
+        if x_inner_val.size:
+            rmse_inner_val, mae_inner_val = self.evaluate(x_inner_val, y_inner_val, norm=True)
+        else:
+            rmse_inner_val, mae_inner_val = np.NaN, np.NaN
+        if x_test.size:
+            rmse_test, mae_test = self.evaluate(x_test, y_test, norm=True)
+        else:
+            rmse_test, mae_test = np.NaN, np.NaN
+        logging.info('Final statistics (kcal/mol):')
+        logging.info(
+            '\t\t\tRMSE\tMAE\n'
+            'Train\t\t{:.2f}\t{:.2f}\n'
+            'Inner val\t{:.2f}\t{:.2f}\n'
+            'Test\t\t{:.2f}\t{:.2f}'.format(
+                rmse_train, mae_train, rmse_inner_val, mae_inner_val, rmse_test, mae_test
+            )
+        )
+
         model_path = os.path.join(self.out_dir, 'model')
         self.save_model(model_path, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss)
 
@@ -149,9 +192,21 @@ class Predictor(object):
         save_model(self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, model_path)
         pickle_dump(mean_and_std_path, (self.y_mean, self.y_std))
 
-    def predict(self, x):
-        y_norm = self.model.predict(x)
-        if self.y_mean is not None and self.y_std is not None:
-            raise Exception('Missing mean and std of training data')
+    def predict(self, x, norm=False):
+        y_norm = self.model.predict(x).flatten()
+        if norm:
+            return y_norm
         else:
-            return y_norm * self.y_std + self.y_mean
+            if self.y_mean is None or self.y_std is None:
+                raise Exception('Missing mean and/or std of training data')
+            else:
+                return y_norm * self.y_std + self.y_mean
+
+    def evaluate(self, x, y, norm=False):
+        y_pred = self.predict(x, norm=norm).flatten()
+        rmse = calculate_rmse(y, y_pred)
+        mae = calculate_mae(y, y_pred)
+        if norm:
+            return self.y_std**2.0 * rmse, self.y_std**2.0 * mae
+        else:
+            return rmse, mae
