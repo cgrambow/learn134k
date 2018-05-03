@@ -25,12 +25,17 @@ def main():
     test_split = args.test_split
     test_struct_file = args.test_data
     train_ratio = args.train_ratio
+    depth = args.depth
+    hidden = args.hidden
     batch_size = args.batch_size
     epochs = args.epochs
     patience = args.patience
     lr = args.learning_rate
     decay = args.lr_decay
     save_names = args.save_names
+
+    model_settings['depth'] = depth
+    model_settings['hidden'] = hidden
 
     train_settings['batch_size'] = batch_size
     train_settings['nb_epoch'] = epochs
@@ -105,6 +110,8 @@ def parse_args():
                              '(all data in struct_file will be used for training)')
     parser.add_argument('-r', '--train_ratio', type=float, default=0.9, metavar='R',
                         help='Fraction of data to train on (rest is inner validation)')
+    parser.add_argument('--depth', type=int, default=3, metavar='D', help='Depth of convolutional layer')
+    parser.add_argument('--hidden', type=int, default=50, metavar='H', help='Number of hidden units in dense layer')
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='B', help='Batch size')
     parser.add_argument('-e', '--epochs', type=int, default=150, metavar='N', help='Maximum number of epochs')
     parser.add_argument('-p', '--patience', type=int, default=10, metavar='P', help='Patience for early stopping')
