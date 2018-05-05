@@ -11,7 +11,7 @@ from l134k.util import pickle_dump
 
 
 def main():
-    data_dir, out_file, ignore_file = parse_args()
+    data_dir, out_file, ignore_file, names_file = parse_args()
     structs = []
 
     ignore = set()
@@ -25,8 +25,17 @@ def main():
                 else:
                     ignore.add(idx)
 
+    names = None
+    if names_file is not None:
+        with open(names_file) as f:
+            names = [line.strip() for line in f]
+
     print('Parsing files...')
-    files = glob.iglob(os.path.join(data_dir, '*.xyz'))
+    if names is None:
+        files = glob.iglob(os.path.join(data_dir, '*.xyz'))
+    else:
+        files = [os.path.join(data_dir, name) for name in names]
+
     for path in files:
         s = Structure(path=path)
         if s.index in ignore:
@@ -48,13 +57,15 @@ def parse_args():
     parser.add_argument('data_dir', metavar='DIR', help='Path to 134k data directory')
     parser.add_argument('out_file', metavar='FILE', help='Path to output file')
     parser.add_argument('--ignore', metavar='FILE', help='Path to file containing list of indices to ignore')
+    parser.add_argument('--names', metavar='FILE', help='Path to file containing list of names to use')
     args = parser.parse_args()
 
     data_dir = args.data_dir
     out_file = args.out_file
     ignore_file = args.ignore
+    names_file = args.names
 
-    return data_dir, out_file, ignore_file
+    return data_dir, out_file, ignore_file, names_file
 
 
 if __name__ == '__main__':
