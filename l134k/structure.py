@@ -188,6 +188,7 @@ class Structure(object):
         """
         temperature = 298.15
         mol = pybel.readstring('smi', self.smiles)  # Use OBMol to extract bond types
+        mol.addh()
 
         # Use RMG molecule to determine if it's linear
         # Assume it's not linear if we can't parse SMILES with RMG
